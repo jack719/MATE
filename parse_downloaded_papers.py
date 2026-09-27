@@ -1,4 +1,4 @@
-#TODO markdown版本
+
 import os
 import json
 import argparse
@@ -69,13 +69,13 @@ def get_cli_args() -> argparse.Namespace:
         action="store_true",
         help="Skip previously encountered exceptions. Default: False",
     )
-    parsing_choices = ["outlines", "guidance", "unconstrained"]
+    parsing_choices = ["unconstrained"]
     parser.add_argument(
         "--parsing_method",
         type=str,
         default="unconstrained",
         choices=parsing_choices,
-        help=f"Method to use for parsing. Must be one of {parsing_choices}. Default: guidance.",
+        help=f"Method to use for parsing. Must be one of {parsing_choices}.",
     )
     parser.add_argument(
         "--hf_modelname",
@@ -91,46 +91,46 @@ def parse_markdown_file(filepath):
     """
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
-    
-    # 初始化
+
+
     title = ""
     abstract = ""
     body = content
-    
+
     lines = content.split('\n')
-    
-    # 尝试提取标题 (第一个 # 标题)
+
+
     for i, line in enumerate(lines):
         if line.strip().startswith('# '):
             title = line.strip()[2:].strip()
-            # 移除标题行
+
             lines = lines[i+1:]
             break
-    
-    # 尝试提取摘要 (查找 Abstract 或 ## Abstract 部分)
+
+
     abstract_start = -1
     abstract_end = -1
-    
+
     for i, line in enumerate(lines):
         lower_line = line.strip().lower()
         if ('abstract' in lower_line or '摘要' in lower_line) and (line.strip().startswith('#') or line.strip().startswith('**')):
             abstract_start = i + 1
             continue
-        
-        # 如果找到了摘要开始,寻找摘要结束(下一个标题或空行后的标题)
+
+
         if abstract_start != -1 and i > abstract_start:
             if line.strip().startswith('##') or line.strip().startswith('# '):
                 abstract_end = i
                 break
-    
-    # 提取摘要
+
+
     if abstract_start != -1:
         if abstract_end != -1:
             abstract = '\n'.join(lines[abstract_start:abstract_end]).strip()
-            # 正文从摘要结束后开始
+
             body = '\n'.join(lines[abstract_end:]).strip()
         else:
-            # 如果没有找到明确的结束,取前几段作为摘要
+
             abstract_lines = []
             for i in range(abstract_start, min(abstract_start + 10, len(lines))):
                 if lines[i].strip().startswith('##') or lines[i].strip().startswith('# '):
@@ -138,7 +138,7 @@ def parse_markdown_file(filepath):
                 abstract_lines.append(lines[i])
             abstract = '\n'.join(abstract_lines).strip()
             body = '\n'.join(lines[abstract_start:]).strip()
-    
+
     return {
         "title": title,
         "abstract": abstract,
@@ -146,7 +146,7 @@ def parse_markdown_file(filepath):
     }
 
 def main():
-    ########### Setup
+
     args = get_cli_args()
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
@@ -171,7 +171,7 @@ def main():
     df_to_continue = load_df_to_continue(continue_csv_path)
 
     def get_files(exceptions=None):
-        # 修改为查找 .md 文件而不是 .json 文件
+
         relevant_files = get_relevant_files(args.downloaded_papers_dir, file_extension='.md')
         if exceptions is None:
             if not continue_training or args.skip_prev_exceptions:
@@ -190,13 +190,10 @@ def main():
         return
 
     model, tokenizer = load_model_and_tokenizer(
-        args.modelpath, args.hf_modelname, temperature=args.temperature
+        args.modelpath, args.hf_modelname
     )
-    LOGGER.warn("Using chatml format - no other formats currently supported")
-    if args.parsing_method == "guidance":
-        LOGGER.warn("Loading ChatMLTemplate into the guidance model - no other formats currently supported")
+    LOGGER.log("Using unconstrained generation.")
 
-    ########### start parsing files
     parsing_func = get_parsing_func(args.parsing_method)
     all_data = []
     parsed_files = []
@@ -222,7 +219,7 @@ def main():
             f"{len(relevant_files)} files left ({idx} already parsed): {fname} - projected finish time: {projected_finish_time} - current number of entries: {n_entries}"
         )
 
-        # 修改:读取 Markdown 文件而不是 JSON
+
         try:
             data = parse_markdown_file(os.path.join(args.downloaded_papers_dir, fname))
         except Exception as e:
@@ -233,11 +230,11 @@ def main():
         with open(os.path.join(args.save_dir, parsedfiles_name), "a+") as f:
             f.write(fname + "\n")
 
-        ########### prepare the prompt
+
         body = data["body"]
         abstract = data["abstract"]
         title = data["title"]
-        
+
         paper = ""
         if len(title):
             paper += title + "\n\n"
@@ -271,10 +268,10 @@ def main():
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
-        
+
         llm = get_model_wrapper(model, tokenizer, save_name_stem, LOGGER, args.parsing_method)
         num_tokens_prompt = len(tokenizer.encode(system_prompt)) + len(tokenizer.encode(user_prompt))
-        
+
         if args.n_ctx is not None:
             tokens_left = args.n_ctx - num_tokens_prompt
             LOGGER.log(
@@ -285,7 +282,7 @@ def main():
                 f"Tokens of paper with prompt: {num_tokens_prompt}"
             )
 
-        ########### save current data and exceptions to csv
+
         if (datetime.now() - last_save_time).seconds > args.save_freq_minutes * 60:
             save_data(all_data, df_to_continue, exceptions, save_name_stem, args.save_dir, args.parsing_method)
             last_save_time = datetime.now()
@@ -293,16 +290,9 @@ def main():
 
         start_time = datetime.now()
 
-        ########### parse the paper
+
         try:
-            if args.parsing_method == "guidance":
-                out = parsing_func(llm, messages, LOGGER)
-            elif args.parsing_method == "outlines":
-                out = parsing_func(llm, messages, LOGGER)
-            elif args.parsing_method == "unconstrained":
-                out = parsing_func(llm, tokenizer, messages, LOGGER)
-            else:
-                out = parsing_func(llm, messages, LOGGER)
+            out = parsing_func(llm, tokenizer, messages, LOGGER)
         except Exception as e:
             n_exceptions_streak += 1
             LOGGER.log(f"Exception: {e}")
@@ -316,7 +306,7 @@ def main():
         if out is None:
             continue
 
-        ########### parse the model output
+
         try:
             if args.parsing_method == "unconstrained":
                 if isinstance(out, tuple) and len(out) == 2:
@@ -343,7 +333,7 @@ def main():
         n_exceptions_streak = 0
         idx += 1
 
-        ########### add metadata to dictionaries
+
         path = "file://" + os.path.abspath(
             os.path.join(args.downloaded_papers_dir, fname)
         )
@@ -351,7 +341,7 @@ def main():
         [d.update({"params": save_name_stem}) for d in data]
         all_data.append(data)
 
-        ########### update time variables and projected finish time
+
         parsing_time = datetime.now() - start_time
         n_files += 1
         mean_time_per_file = (
