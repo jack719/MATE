@@ -2,8 +2,6 @@
 
 This repository contains the parsing code used to extract titanium-alloy samples, compositions, processing routes, and mechanical properties from paper text. The maintained workflow starts with Markdown papers that have already been produced by a document-conversion tool such as MinerU.
 
-Only the `unconstrained` parser is exposed because it is the only active path in this repository.
-
 ## Installation
 
 Use Python 3.10 or newer and install the dependencies:
